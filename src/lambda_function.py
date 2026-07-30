@@ -120,7 +120,7 @@ def lambda_handler(event, context):
             )
 
         original_names = [
-            ticket.full_name
+            ticket.full_name.strip().title()
             for ticket in tickets
             if ticket.full_name
         ]
@@ -157,7 +157,7 @@ def lambda_handler(event, context):
 
             url = wheel.create_shared_wheel(
                 names,
-                title=wheel_title(),
+                title=wheel_title(event_date.start_date),
             )
 
         logger.info(
