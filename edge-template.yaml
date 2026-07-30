@@ -1,0 +1,150 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: Little Loop CloudFront protection layer
+
+Parameters:
+  LambdaFunctionUrl:
+    Type: String
+    Description: Lambda Function URL from the application stack
+
+  Username:
+    Type: String
+    Default: littleloop
+
+  Password:
+    Type: String
+    NoEcho: true
+
+  CloudFrontSecret:
+    Type: String
+    NoEcho: true
+
+Resources:
+  FunctionUrlOac:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: little-loop-lambda-url-oac
+        Description: Access control for Lambda Function URL
+        OriginAccessControlOriginType: lambda
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  LittleLoopWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: LittleLoopWebACL
+      Scope: CLOUDFRONT
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: LittleLoopWebACL
+      Rules: []
+
+  LittleLoopAuthFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: little-loop-basic-auth
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Little Loop Basic Authentication
+        Runtime: cloudfront-js-1.0
+      FunctionCode: !Sub |
+        function encodeBase64(input) {
+            var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+            var output = "";
+            var i = 0;
+        
+            while (i < input.length) {
+                var c1 = input.charCodeAt(i++);
+                var c2 = input.charCodeAt(i++);
+                var c3 = input.charCodeAt(i++);
+        
+                var e1 = c1 >> 2;
+                var e2 = ((c1 & 3) << 4) | (c2 >> 4);
+                var e3 = ((c2 & 15) << 2) | (c3 >> 6);
+                var e4 = c3 & 63;
+        
+                if (isNaN(c2)) {
+                    e3 = e4 = 64;
+                } else if (isNaN(c3)) {
+                    e4 = 64;
+                }
+        
+                output += chars.charAt(e1);
+                output += chars.charAt(e2);
+                output += chars.charAt(e3);
+                output += chars.charAt(e4);
+            }
+        
+            return output;
+        }
+        
+        function handler(event) {
+            var request = event.request;
+            var headers = request.headers;
+        
+            var username = "${Username}";
+            var password = "${Password}";
+            var expected = "Basic " + encodeBase64(username + ":" + password);
+        
+            if (!headers.authorization ||
+                headers.authorization.value !== expected) {
+                return {
+                    statusCode: 401,
+                    statusDescription: "Unauthorized",
+                    headers: {
+                        "www-authenticate": {
+                            value: 'Basic realm="Little Loop"'
+                        }
+                    }
+                };
+            }
+
+            return request;
+        }
+
+  LittleLoopDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        WebACLId: !GetAtt LittleLoopWebACL.Arn
+        Origins:
+          - Id: little-loop-lambda-url
+            DomainName: !Select
+              - 2
+              - !Split
+                - /
+                - !Ref LambdaFunctionUrl
+            OriginAccessControlId: !GetAtt FunctionUrlOac.Id
+            OriginCustomHeaders:
+              - HeaderName: X-LittleLoop-Secret
+                HeaderValue: !Ref CloudFrontSecret
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+        DefaultCacheBehavior:
+          TargetOriginId: little-loop-lambda-url
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt LittleLoopAuthFunction.FunctionMetadata.FunctionARN
+  
+Outputs:
+  CloudFrontDomainName:
+    Description: CloudFront public hostname
+    Value: !GetAtt LittleLoopDistribution.DomainName
+  CloudFrontDistributionId:
+    Description: DistributionId for use in cloudfront origin authorisations (in template.yaml)
+    Value: !Ref LittleLoopDistribution

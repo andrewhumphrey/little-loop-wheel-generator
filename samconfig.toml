@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "littleloop-wheel-generator"
+resolve_s3 = true
+s3_prefix = "littleloop-wheel-generator"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "EventId=\"680454e28e2839f361df6b24\" DistributionId=\"EQEQJU6WISQ6E\""
+image_repositories = []
+
+[default.global.parameters]
+region = "ap-southeast-2"

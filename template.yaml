@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Transform: AWS::Serverless-2016-10-31
+
+Description: Little Loop wheel generator
+
+Parameters:
+  EventId:
+    Type: String
+    Description: Humanitix event ID
+  DistributionId:
+    Type: String
+    Description: ID of the Cloudfront distribution to restrict access to (from edge-template.yml)
+
+Resources:
+  LittleLoopFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: little-loop-wheel-generator
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      CodeUri: src/
+      Timeout: 60
+      MemorySize: 256
+      Architectures:
+        - x86_64
+
+      FunctionUrlConfig:
+        AuthType: AWS_IAM
+        InvokeMode: BUFFERED
+
+      Environment:
+        Variables:
+          EVENT_ID: !Ref EventId
+          HUMANITIX_PARAMETER: /littleloop/humanitix/api-key
+          WHEEL_PARAMETER: /littleloop/wheel/api-key
+          CLOUDFRONT_SECRET_PARAMETER: /littleloop/cloudfront/shared-secret
+
+      Policies:
+        - Statement:
+            Effect: Allow
+            Action:
+              - ssm:GetParameter
+            Resource:
+              - arn:aws:ssm:*:*:parameter/littleloop/*
+  AllowCloudFrontInvokeFunctionUrl:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LittleLoopFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: cloudfront.amazonaws.com
+      FunctionUrlAuthType: AWS_IAM
+      SourceArn: !Sub
+        - arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${DistributionId}
+        - DistributionId: !Ref DistributionId
+
+  AllowCloudFrontInvokeFunction:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LittleLoopFunction
+      Action: lambda:InvokeFunction
+      Principal: cloudfront.amazonaws.com
+      InvokedViaFunctionUrl: true
+      SourceArn: !Sub
+        - arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${DistributionId}
+        - DistributionId: !Ref DistributionId
+
+Outputs:
+  FunctionArn:
+    Description: Lambda function ARN
+    Value:
+      Fn::GetAtt:
+        - LittleLoopFunction
+        - Arn
+
+  FunctionUrl:
+    Description: Lambda Function URL
+    Value:
+      Fn::GetAtt:
+        - LittleLoopFunctionUrl
+        - FunctionUrl
