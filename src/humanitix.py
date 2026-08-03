@@ -70,6 +70,23 @@ class HumanitixClient:
         data = self._get(f"/events/{event_id}")
         return Event.from_api(data)
 
+    def find_event_date(
+        self,
+        event: Event,
+        target_date: date,
+    ) -> EventDate:
+        """
+        Returns the event occurring on the supplied calendar date.
+        """
+
+        for event_date in event.dates:
+            if event_date.start_date.date() == target_date:
+                return event_date
+
+        raise ValueError(
+            f"No event found on {target_date.isoformat()}"
+        )
+
     def find_next_event_date(self, event: Event) -> EventDate:
         """
         Returns the next upcoming event date.

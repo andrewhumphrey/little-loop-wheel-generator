@@ -41,6 +41,7 @@ class Event:
     id: str
     name: str
     dates: list[EventDate]
+    timezone: str
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> "Event":
@@ -74,4 +75,5 @@ class Event:
             id=data.get("_id") or data.get("id"),
             name=data.get("name", ""),
             dates=parsed_dates,
+            timezone=data.get("timezone", "UTC"),
         )

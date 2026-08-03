@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 import logging
 import random
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from config import Settings
 from humanitix import HumanitixClient
 from secrets import Secrets
 from util import wheel_title
 from wheel import WheelClient
-
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +31,6 @@ def _response(
 def deduplicate_names(names: list[str]) -> tuple[list[str], list[str]]:
     """
     Remove duplicate names while preserving the first occurrence.
-
-    Returns:
-        (
-            unique_names,
-            duplicate_names_removed
-        )
     """
 
     seen = set()
@@ -60,20 +55,39 @@ def deduplicate_names(names: list[str]) -> tuple[list[str], list[str]]:
     return unique_names, duplicates
 
 
-def lambda_handler(event, context):
+def requested_date(request) -> datetime.date | None:
     """
-    Lambda Function URL entry point.
-
-    Returns:
-        {
-            "wheel_url": "...",
-            "attendee_count": 10,
-            "duplicates_removed": [
-                "John Smith"
-            ]
-        }
+    Extract the requested event date from the Lambda Function URL.
+        / -> next upcoming event
+        /today -> today's event
+        /2026-08-02 -> event on 2 August 2026
     """
 
+    path = (
+        request.get("rawPath")
+        or request.get("path")
+        or ""
+    ).strip("/")
+
+    if not path:
+        return None
+
+    if path.casefold() == "today":
+        return "today"
+
+    try:
+        return datetime.strptime(
+            path,
+            "%Y-%m-%d",
+        ).date()
+
+    except ValueError:
+        raise ValueError(
+            "Path must be /today or /YYYY-MM-DD"
+        )
+
+
+def lambda_handler(request, context):
     settings = Settings.load_settings()
     settings.configure_logging()
 
@@ -84,6 +98,8 @@ def lambda_handler(event, context):
     secrets = Secrets()
 
     try:
+        target_date = requested_date(request)
+
         humanitix_api_key = secrets.get_secret(
             settings.humanitix_parameter
         )
@@ -101,13 +117,35 @@ def lambda_handler(event, context):
                 settings.event_id,
             )
 
-            event = humanitix.get_event(
+            humanitix_event = humanitix.get_event(
                 settings.event_id
             )
+            if target_date == "today":
+                tz = ZoneInfo(humanitix_event.timezone)
+                target_date = datetime.now(tz).date()
 
-            event_date = humanitix.find_next_event_date(
-                event
-            )
+            logger.info("target_date = %s", target_date)
+
+
+            if target_date is None:
+                logger.info(
+                    "Selecting next upcoming event"
+                )
+
+                event_date = humanitix.find_next_event_date(
+                    humanitix_event
+                )
+
+            else:
+                logger.info(
+                    "Selecting event on %s",
+                    target_date.isoformat(),
+                )
+
+                event_date = humanitix.find_event_date(
+                    humanitix_event,
+                    target_date,
+                )
 
             logger.info(
                 "Using event date %s",
@@ -168,9 +206,12 @@ def lambda_handler(event, context):
         return _response(
             200,
             {
-                "event_date_display": event_date.start_date.strftime(
-                    "%A %d %B %Y %H:%M %Z"
+                "requested_date": (
+                    target_date.isoformat()
+                    if target_date
+                    else "next"
                 ),
+                "event_date_display": wheel_title(event_date.start_date),
                 "wheel_url": url,
                 "attendee_count": len(names),
                 "original_ticket_count": len(original_names),
