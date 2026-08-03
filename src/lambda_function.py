@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -90,6 +91,15 @@ def requested_date(request) -> datetime.date | None:
 def lambda_handler(request, context):
     settings = Settings.load_settings()
     settings.configure_logging()
+
+    raw_path = request.get("rawPath", "").lstrip("/")
+    # Only allow "", "today" or YYYY-MM-DD
+    if raw_path not in ["today", ""] and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw_path):
+        logger.info(f"Rejected request for {raw_path}")
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"error": "Invalid date. Use YYYY-MM-DD or today."}),
+        }
 
     logger.info(
         "Starting Little Loop wheel generation"
