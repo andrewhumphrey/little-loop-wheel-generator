@@ -35,6 +35,7 @@ Resources:
           HUMANITIX_PARAMETER: /littleloop/humanitix/api-key
           WHEEL_PARAMETER: /littleloop/wheel/api-key
           CLOUDFRONT_SECRET_PARAMETER: /littleloop/cloudfront/shared-secret
+          EMAIL_RECIPIENTS: "andrew@ajh.is, team@littlecreatures.co.nz, hello@earlybirdrun.org"
 
       Policies:
         - Statement:

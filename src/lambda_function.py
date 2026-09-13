@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import random
 import re
+import smtplib
+from email.message import EmailMessage
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -14,6 +17,10 @@ from util import wheel_title
 from wheel import WheelClient
 
 logger = logging.getLogger(__name__)
+
+GMAIL_USERNAME = "andrew.j.humphrey@gmail.com"
+GMAIL_SMTP_HOST = "smtp.gmail.com"
+GMAIL_SMTP_PORT = 465
 
 
 def _response(
@@ -86,6 +93,45 @@ def requested_date(request) -> datetime.date | None:
         raise ValueError(
             "Path must be /today or /YYYY-MM-DD"
         )
+
+
+
+
+
+
+def send_email(subject, body, app_password):
+    """
+    Send an email via Gmail SMTP.
+    Email is only sent when the EMAIL_RECIPIENTS environment variable
+    is set to one or more email addresses.
+    EMAIL_RECIPIENTS may contain multiple comma-separated addresses, e.g.:
+    """
+
+    recipients_value = os.environ.get("EMAIL_RECIPIENTS", "").strip()
+
+    if not recipients_value:
+        return
+
+    recipients = [
+        address.strip()
+        for address in recipients_value.split(",")
+        if address.strip()
+    ]
+
+    if not recipients:
+        return
+
+    logger.info(f"Sending email to {recipients}")
+
+    message = EmailMessage()
+    message["From"] = GMAIL_USERNAME
+    message["To"] = ", ".join(recipients)
+    message["Subject"] = subject
+    message.set_content(body)
+
+    with smtplib.SMTP_SSL(GMAIL_SMTP_HOST, GMAIL_SMTP_PORT) as smtp:
+        smtp.login(GMAIL_USERNAME, app_password)
+        smtp.send_message(message)
 
 
 def lambda_handler(request, context):
@@ -213,6 +259,11 @@ def lambda_handler(request, context):
             url,
         )
 
+        send_email(
+            subject="Wheel link for today",
+            body=f"Hi and happy Sunday,  the wheel for today's {event_date.start_date} little loop has been generated, the URL is {url}, kind regards Andrew",
+            app_password=secrets.get_secret("/littleloop/email-key")
+        )
         return _response(
             200,
             {
