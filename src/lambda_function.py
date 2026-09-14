@@ -95,19 +95,44 @@ def requested_date(request) -> datetime.date | None:
         )
 
 
+def is_eventbridge_scheduled_event(event: dict) -> bool:
+    """Return whether *event* is an EventBridge schedule invocation."""
+
+    return (
+        event.get("source") in {"aws.events", "aws.scheduler"}
+        and event.get("detail-type") == "Scheduled Event"
+    )
+
+
+def human_date(value: datetime) -> str:
+    """Format a date as a human-friendly date with an ordinal day."""
+
+    day = value.day
+    suffix = "th" if 11 <= day % 100 <= 13 else {
+        1: "st",
+        2: "nd",
+        3: "rd",
+    }.get(day % 10, "th")
+    return f"{day}{suffix} {value.strftime('%B %Y')}"
+
+
+def weekday_name(now: datetime | None = None) -> str:
+    """Return the current weekday in the schedule's Auckland timezone."""
+
+    current_time = now or datetime.now(ZoneInfo("Pacific/Auckland"))
+    return current_time.strftime("%A")
 
 
 
 
-def send_email(subject, body, app_password):
+
+def send_email(subject, body, recipients_value, app_password):
     """
     Send an email via Gmail SMTP.
     Email is only sent when the EMAIL_RECIPIENTS environment variable
     is set to one or more email addresses.
     EMAIL_RECIPIENTS may contain multiple comma-separated addresses, e.g.:
     """
-
-    recipients_value = os.environ.get("EMAIL_RECIPIENTS", "").strip()
 
     if not recipients_value:
         return
@@ -259,11 +284,17 @@ def lambda_handler(request, context):
             url,
         )
 
-        send_email(
-            subject="Wheel link for today",
-            body=f"Hi and happy Sunday,  the wheel for today's {event_date.start_date} little loop has been generated, the URL is {url}, kind regards Andrew",
-            app_password=secrets.get_secret("/littleloop/email-key")
-        )
+        if is_eventbridge_scheduled_event(request):
+            send_email(
+                subject="Wheel link for today",
+                body=f"Hi and happy {weekday_name()}\nThe wheel for the {human_date(event_date.start_date)} little loop has been generated, the URL is {url}, so far {len(names)} people have signed up.\nKind regards,\nEarly Bird Run Crew.",
+                recipients_value=os.environ.get("EMAIL_RECIPIENTS", "").strip(),
+                app_password=secrets.get_secret("/littleloop/email-key"),
+            )
+        else:
+            logger.info(
+                "Skipping email for a non-scheduled invocation"
+            )
         return _response(
             200,
             {
