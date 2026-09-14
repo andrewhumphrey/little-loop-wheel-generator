@@ -29,6 +29,15 @@ Resources:
         AuthType: AWS_IAM
         InvokeMode: BUFFERED
 
+      Events:
+        WeeklyWheelGeneration:
+          Type: ScheduleV2
+          Properties:
+            Description: Generate and email the Little Loop wheel every Sunday.
+            ScheduleExpression: cron(30 15 ? * SUN *)
+            ScheduleExpressionTimezone: Pacific/Auckland
+            Input: '{"source":"aws.scheduler","detail-type":"Scheduled Event"}'
+
       Environment:
         Variables:
           EVENT_ID: !Ref EventId
