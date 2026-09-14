@@ -6,7 +6,7 @@ resolve_s3 = true
 s3_prefix = "littleloop-wheel-generator"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
-parameter_overrides = "EventId=\"680454e28e2839f361df6b24\" DistributionId=\"EQEQJU6WISQ6E\""
+parameter_overrides = "EventId=680454e28e2839f361df6b24 DistributionId=EQEQJU6WISQ6E"
 image_repositories = []
 
 [default.global.parameters]

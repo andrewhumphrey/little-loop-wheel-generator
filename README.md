@@ -75,12 +75,17 @@ You then need the distribution id from the cloudfront distribution that makes to
 Also remember to go and set the cloudfront distribution to the free plan and enable a custom domain name
 
 You can put this in whatever region you want.
-sam deploy --guided
+./deploy.sh
 
 During deployment provide:
 
 EventId
 DistributionId
+
+`deploy.sh` builds the source template before deployment and supplies a new
+deployment nonce on every run. This forces Lambda's environment configuration
+to be reapplied from `template.yaml`, undoing any temporary environment-variable
+edits made in the AWS console.
 
 
 ## Calling the Lambda

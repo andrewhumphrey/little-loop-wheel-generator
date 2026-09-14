@@ -11,6 +11,9 @@ Parameters:
   DistributionId:
     Type: String
     Description: ID of the Cloudfront distribution to restrict access to (from edge-template.yml)
+  DeploymentNonce:
+    Type: String
+    Description: Unique value that forces Lambda configuration reconciliation on each deployment.
 
 Resources:
   LittleLoopFunction:
@@ -45,6 +48,7 @@ Resources:
           WHEEL_PARAMETER: /littleloop/wheel/api-key
           CLOUDFRONT_SECRET_PARAMETER: /littleloop/cloudfront/shared-secret
           EMAIL_RECIPIENTS: "andrew@ajh.is, team@littlecreatures.co.nz, hello@earlybirdrun.org"
+          DEPLOYMENT_NONCE: !Ref DeploymentNonce
 
       Policies:
         - Statement:
