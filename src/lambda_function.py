@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import logging
 import os
@@ -23,18 +24,14 @@ GMAIL_SMTP_HOST = "smtp.gmail.com"
 GMAIL_SMTP_PORT = 465
 
 
-def _response(
-    status_code: int,
-    body: dict,
-) -> dict:
+def _response(status_code: int, body: str) -> dict:
     return {
         "statusCode": status_code,
         "headers": {
-            "content-type": "application/json",
+            "Content-Type": "text/html; charset=utf-8",
         },
-        "body": json.dumps(body),
+        "body": body,
     }
-
 
 def deduplicate_names(names: list[str]) -> tuple[list[str], list[str]]:
     """
@@ -295,21 +292,26 @@ def lambda_handler(request, context):
             logger.info(
                 "Skipping email for a non-scheduled invocation"
             )
+
+        safe_url = html.escape(url, quote=True)
+        safe_title = html.escape(wheel_title(event_date.start_date))
+
         return _response(
             200,
-            {
-                "requested_date": (
-                    target_date.isoformat()
-                    if target_date
-                    else "next"
-                ),
-                "event_date_display": wheel_title(event_date.start_date),
-                "wheel_url": url,
-                "attendee_count": len(names),
-                "original_ticket_count": len(original_names),
-                "duplicates_removed": duplicates_removed,
-            },
+            f"""<!doctype html>
+        <html>
+          <head><meta charset="utf-8"><title>Event details</title></head>
+          <body>
+            <p>Requested date: {html.escape(target_date.isoformat() if target_date else "next")}</p>
+            <p>Event: {safe_title}</p>
+            <p><a href="{safe_url}">{safe_url}</a></p>
+            <p>Attendees: {len(names)}</p>
+            <p>Original tickets: {len(original_names)}</p>
+            <p>Duplicates removed: {duplicates_removed}</p>
+          </body>
+        </html>""",
         )
+
 
     except Exception as exc:
         logger.exception(
