@@ -23,15 +23,27 @@ GMAIL_USERNAME = "andrew.j.humphrey@gmail.com"
 GMAIL_SMTP_HOST = "smtp.gmail.com"
 GMAIL_SMTP_PORT = 465
 
-
-def _response(status_code: int, body: str) -> dict:
+def _response(status_code: int, body: str, content_type: str) -> dict:
     return {
         "statusCode": status_code,
-        "headers": {
-            "Content-Type": "text/html; charset=utf-8",
-        },
+        "headers": {"Content-Type": content_type},
         "body": body,
     }
+
+def get_accept(event):
+    # Lambda Function URL or API Gateway style
+    headers = event.get("headers") or {}
+    for key, value in headers.items():
+        if key.lower() == "accept":
+            return value if isinstance(value, str) else value.get("value", "")
+
+    # CloudFront Lambda@Edge event shape
+    try:
+        cf_headers = event["Records"][0]["cf"]["request"]["headers"]
+        values = cf_headers.get("accept", [])
+        return values[0].get("value", "") if values else ""
+    except (KeyError, IndexError, TypeError):
+        return ""
 
 def deduplicate_names(names: list[str]) -> tuple[list[str], list[str]]:
     """
@@ -169,9 +181,11 @@ def lambda_handler(request, context):
             "body": json.dumps({"error": "Invalid date. Use YYYY-MM-DD or today."}),
         }
 
-    logger.info(
-        "Starting Little Loop wheel generation"
-    )
+    logger.info("Starting Little Loop wheel generation")
+
+    accept=get_accept(request)
+
+    wants_json = is_eventbridge_scheduled_event(request) or "application/json" in accept
 
     secrets = Secrets()
 
@@ -292,6 +306,22 @@ def lambda_handler(request, context):
             logger.info(
                 "Skipping email for a non-scheduled invocation"
             )
+        result = {
+            "requested_date": target_date.isoformat() if target_date else "next",
+            "event_date_display": wheel_title(event_date.start_date),
+            "wheel_url": url,
+            "attendee_count": len(names),
+            "original_ticket_count": len(original_names),
+            "duplicates_removed": duplicates_removed,
+        }
+
+        if wants_json:
+            logger.info("Returning JSON")
+            return _response(
+                200,
+                json.dumps(result),
+                "application/json",
+            )
 
         safe_url = html.escape(url, quote=True)
         safe_title = html.escape(wheel_title(event_date.start_date))
@@ -309,9 +339,7 @@ def lambda_handler(request, context):
             <p>Original tickets: {len(original_names)}</p>
             <p>Duplicates removed: {duplicates_removed}</p>
           </body>
-        </html>""",
-        )
-
+        </html>""", "text/html; charset=utf-8")
 
     except Exception as exc:
         logger.exception(
