@@ -13,4 +13,4 @@ fi
 
 "$sam_command" build
 
-"$sam_command" deploy --parameter-overrides "$configured_overrides DeploymentNonce=\"$nonce\"" "$@"
+"$sam_command" deploy  --no-confirm-changeset --parameter-overrides "$configured_overrides DeploymentNonce=\"$nonce\"" "$@"
